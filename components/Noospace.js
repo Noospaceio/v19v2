@@ -275,10 +275,16 @@ export default function NooSpace() {
                     }}>Resonate ({e.resonates || 0})</button>
                     <button onClick={async () => {
                       if (!wallet) return alert('Connect to sacrifice.');
-                      const ok = confirm('Sacrifice 20 NOO to highlight this post? (mock)');
+                      const ok = confirm('Sacrifice 20 NOO to highlight this post?');
                       if (!ok) return;
+
                       const newBalance = await addOrUpdateBalance(wallet, -20);
                       setBalance(newBalance);
+
+                      // Update Supabase
+                      await supabase.from('posts').update({ highlighted: true }).eq('id', e.id);
+
+                      // Update local state
                       setEntries(entries.map(x => x.id === e.id ? { ...x, highlighted: true } : x));
                     }} className="burn">Sacrifice 20 NOO</button>
                   </div>
