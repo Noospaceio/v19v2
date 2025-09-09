@@ -153,7 +153,7 @@ export default function NooSpace() {
     const updateDaysLeft = () => {
       let ts = startTs;
       if (ts < 1e12) {
-        // Sekunden → in Millisekunden umwandeln
+        // Sekunden → Millisekunden
         ts = ts * 1000;
       }
       const now = Date.now();
@@ -286,10 +286,8 @@ export default function NooSpace() {
                       const newBalance = await addOrUpdateBalance(wallet, -20);
                       setBalance(newBalance);
 
-                      // Update Supabase
                       await supabase.from('posts').update({ highlighted: true }).eq('id', e.id);
 
-                      // Update local state
                       setEntries(entries.map(x => x.id === e.id ? { ...x, highlighted: true } : x));
                     }} className="burn">Sacrifice 20 NOO</button>
                   </div>
