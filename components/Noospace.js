@@ -7,6 +7,7 @@ const DAILY_LIMIT = 3;
 const MAX_CHARS = 240;
 const AIRDROP_PER_USER = 1600;
 const HARVEST_DAYS = 9;
+const SACRIFICE_AMOUNT = 20; // Burn pro Post
 
 // --- Backend helpers ---
 async function savePostToBackend(wallet, entry) {
@@ -152,10 +153,7 @@ export default function NooSpace() {
   useEffect(() => {
     const updateDaysLeft = () => {
       let ts = startTs;
-      if (ts < 1e12) {
-        // Sekunden → Millisekunden
-        ts = ts * 1000;
-      }
+      if (ts < 1e12) ts *= 1000;
       const now = Date.now();
       const diff = Math.max(0, ts + HARVEST_DAYS * 24 * 60 * 60 * 1000 - now);
       setDaysLeft(Math.ceil(diff / (24 * 60 * 60 * 1000)));
@@ -280,16 +278,21 @@ export default function NooSpace() {
                     }}>Resonate ({e.resonates || 0})</button>
                     <button onClick={async () => {
                       if (!wallet) return alert('Connect to sacrifice.');
-                      const ok = confirm('Sacrifice 20 NOO to highlight this post?');
+                      const ok = confirm(`Sacrifice ${SACRIFICE_AMOUNT} NOO to highlight this post?`);
                       if (!ok) return;
 
-                      const newBalance = await addOrUpdateBalance(wallet, -20);
+                      const newBalance = await addOrUpdateBalance(wallet, -SACRIFICE_AMOUNT);
                       setBalance(newBalance);
 
                       await supabase.from('posts').update({ highlighted: true }).eq('id', e.id);
 
+                      // --- Burn eintragen ---
+                      await supabase.from('burns').insert({ wallet, post_id: e.id, amount: SACRIFICE_AMOUNT });
+
                       setEntries(entries.map(x => x.id === e.id ? { ...x, highlighted: true } : x));
-                    }} className="burn">Sacrifice 20 NOO</button>
+                    }} className="burn">
+                      Sacrifice {SACRIFICE_AMOUNT} NOO
+                    </button>
                   </div>
                   <time>{new Date(e.created_at).toLocaleString()}</time>
                 </div>
@@ -306,5 +309,6 @@ export default function NooSpace() {
     </div>
   );
 }
+
 
 
