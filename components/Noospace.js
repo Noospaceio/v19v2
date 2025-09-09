@@ -151,8 +151,13 @@ export default function NooSpace() {
   // Berechne Tage bis Harvest
   useEffect(() => {
     const updateDaysLeft = () => {
+      let ts = startTs;
+      if (ts < 1e12) {
+        // Sekunden → in Millisekunden umwandeln
+        ts = ts * 1000;
+      }
       const now = Date.now();
-      const diff = Math.max(0, startTs + HARVEST_DAYS * 24 * 60 * 60 * 1000 - now);
+      const diff = Math.max(0, ts + HARVEST_DAYS * 24 * 60 * 60 * 1000 - now);
       setDaysLeft(Math.ceil(diff / (24 * 60 * 60 * 1000)));
     };
     updateDaysLeft();
@@ -303,4 +308,5 @@ export default function NooSpace() {
     </div>
   );
 }
+
 
