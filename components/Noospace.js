@@ -54,7 +54,7 @@ async function addOrUpdateBalance(wallet, delta) {
   try {
     const { data: existing } = await supabase.from('balances').select('balance').eq('wallet', wallet).single();
     let current = existing?.balance || 0;
-    const newBalance = Math.max(0, current + delta); // Nicht ins Minus gehen
+    const newBalance = Math.max(0, current + delta);
     await supabase.from('balances').upsert({ wallet, balance: newBalance }, { onConflict: ['wallet'] });
     return newBalance;
   } catch (e) {
@@ -125,16 +125,7 @@ export default function NooSpace() {
 
     if (wallet) {
       fetchUsedToday(wallet).then(setUsedToday);
-
-      // Balance prüfen und korrigieren, wenn negativ
-      fetchBalance(wallet).then(bal => {
-        if (bal < 0) {
-          addOrUpdateBalance(wallet, -bal).then(setBalance);
-        } else {
-          setBalance(bal);
-        }
-      });
-
+      fetchBalance(wallet).then(setBalance);
       supabase.from('unclaimed').select('amount').eq('wallet', wallet).single()
         .then(res => setUnclaimed(res.data?.amount || 0))
         .catch(() => setUnclaimed(0));
@@ -192,8 +183,7 @@ export default function NooSpace() {
       setUsedToday(newCount);
       const newUnclaimed = await addOrUpdateUnclaimed(wallet, reward);
       setUnclaimed(newUnclaimed);
-      const newBalance = await addOrUpdateBalance(wallet, reward);
-      setBalance(newBalance);
+      // NICHT direkt Balance erhöhen – nur unclaimed
       setFarmedTotal(prev => prev + reward);
     } else {
       setUsedToday(prev => { localStorage.setItem('noo_used', String(prev + 1)); return prev + 1; });
@@ -289,10 +279,10 @@ export default function NooSpace() {
                     }}>Resonate ({e.resonates || 0})</button>
                     <button onClick={async () => {
                       if (!wallet) return alert('Connect to sacrifice.');
+                      if (balance < SACRIFICE_AMOUNT) return alert('Not enough NOO to sacrifice.');
                       const ok = confirm(`Sacrifice ${SACRIFICE_AMOUNT} NOO to highlight this post?`);
                       if (!ok) return;
 
-                      if (balance < SACRIFICE_AMOUNT) return alert('Not enough NOO to sacrifice.');
                       const newBalance = await addOrUpdateBalance(wallet, -SACRIFICE_AMOUNT);
                       setBalance(newBalance);
 
@@ -319,6 +309,7 @@ export default function NooSpace() {
     </div>
   );
 }
+
 
 
 
