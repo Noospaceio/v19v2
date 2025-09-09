@@ -1,4 +1,3 @@
-// pages/api/harvest.js
 import { supabase } from '../../lib/supabaseClient'
 
 const HARVEST_DAYS = 9 // Tage bis Harvest möglich
@@ -64,4 +63,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'server error' })
   }
 }
+
 
