@@ -53,7 +53,8 @@ async function addOrUpdateBalance(wallet, delta) {
   if (!wallet) return 0;
   try {
     const { data: existing } = await supabase.from('balances').select('balance').eq('wallet', wallet).single();
-    const newBalance = (existing?.balance || 0) + delta;
+    let current = existing?.balance || 0;
+    const newBalance = Math.max(0, current + delta); // Nicht ins Minus gehen
     await supabase.from('balances').upsert({ wallet, balance: newBalance }, { onConflict: ['wallet'] });
     return newBalance;
   } catch (e) {
@@ -118,13 +119,21 @@ export default function NooSpace() {
   const [farmedTotal, setFarmedTotal] = useState(0);
   const [daysLeft, setDaysLeft] = useState(HARVEST_DAYS);
 
-  // Fetch posts + balances + daily usage + unclaimed + wallet start_ts
+  // --- Fetch data on load ---
   useEffect(() => {
     fetchPostsFromBackend().then(setEntries);
 
     if (wallet) {
       fetchUsedToday(wallet).then(setUsedToday);
-      fetchBalance(wallet).then(setBalance);
+
+      // Balance prüfen und korrigieren, wenn negativ
+      fetchBalance(wallet).then(bal => {
+        if (bal < 0) {
+          addOrUpdateBalance(wallet, -bal).then(setBalance);
+        } else {
+          setBalance(bal);
+        }
+      });
 
       supabase.from('unclaimed').select('amount').eq('wallet', wallet).single()
         .then(res => setUnclaimed(res.data?.amount || 0))
@@ -149,7 +158,7 @@ export default function NooSpace() {
     }
   }, [wallet]);
 
-  // Berechne Tage bis Harvest
+  // --- Tage bis Harvest ---
   useEffect(() => {
     const updateDaysLeft = () => {
       let ts = startTs;
@@ -163,6 +172,7 @@ export default function NooSpace() {
     return () => clearInterval(interval);
   }, [startTs]);
 
+  // --- Posting ---
   async function post() {
     if (!guest && usedToday >= DAILY_LIMIT) return alert("You have used today's orbs.");
     if (!text.trim()) return;
@@ -192,6 +202,7 @@ export default function NooSpace() {
     setText('');
   }
 
+  // --- Harvest ---
   async function harvestNow() {
     if (!wallet) return alert('Connect wallet to harvest your spores.');
     if (daysLeft > 0) return alert(`Harvest not ready. ${daysLeft} days left.`);
@@ -281,12 +292,11 @@ export default function NooSpace() {
                       const ok = confirm(`Sacrifice ${SACRIFICE_AMOUNT} NOO to highlight this post?`);
                       if (!ok) return;
 
+                      if (balance < SACRIFICE_AMOUNT) return alert('Not enough NOO to sacrifice.');
                       const newBalance = await addOrUpdateBalance(wallet, -SACRIFICE_AMOUNT);
                       setBalance(newBalance);
 
                       await supabase.from('posts').update({ highlighted: true }).eq('id', e.id);
-
-                      // --- Burn eintragen ---
                       await supabase.from('burns').insert({ wallet, post_id: e.id, amount: SACRIFICE_AMOUNT });
 
                       setEntries(entries.map(x => x.id === e.id ? { ...x, highlighted: true } : x));
@@ -309,6 +319,7 @@ export default function NooSpace() {
     </div>
   );
 }
+
 
 
 
