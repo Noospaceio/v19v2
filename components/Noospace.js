@@ -8,6 +8,7 @@ const MAX_CHARS = 240;
 const AIRDROP_PER_USER = 1600;
 const HARVEST_DAYS = 9;
 const SACRIFICE_AMOUNT = 20; // Burn pro Post
+const PAGE_SIZE = 20; // Posts pro Ladung
 
 // --- Backend helpers ---
 async function savePostToBackend(wallet, entry) {
@@ -24,13 +25,13 @@ async function savePostToBackend(wallet, entry) {
   }
 }
 
-async function fetchPostsFromBackend() {
+async function fetchPostsPage(offset = 0, limit = PAGE_SIZE) {
   try {
     const { data, error } = await supabase
       .from('posts')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(200);
+      .range(offset, offset + limit - 1);
     if (error) throw error;
     return data;
   } catch (e) {
@@ -111,6 +112,10 @@ export default function NooSpace() {
 
   const [text, setText] = useState('');
   const [entries, setEntries] = useState([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+
   const [usedToday, setUsedToday] = useState(0);
   const [startTs, setStartTs] = useState(Date.now());
   const [unclaimed, setUnclaimed] = useState(0);
@@ -119,10 +124,35 @@ export default function NooSpace() {
   const [farmedTotal, setFarmedTotal] = useState(0);
   const [daysLeft, setDaysLeft] = useState(HARVEST_DAYS);
 
-  // --- Fetch data on load ---
-  useEffect(() => {
-    fetchPostsFromBackend().then(setEntries);
+  // --- Posts laden ---
+  async function loadMore() {
+    if (loading || !hasMore) return;
+    setLoading(true);
+    const newPosts = await fetchPostsPage(page * PAGE_SIZE, PAGE_SIZE);
+    setEntries(prev => [...prev, ...newPosts]);
+    setPage(prev => prev + 1);
+    if (newPosts.length < PAGE_SIZE) setHasMore(false);
+    setLoading(false);
+  }
 
+  // Erstes Laden
+  useEffect(() => {
+    loadMore();
+  }, []);
+
+  // Infinite Scroll
+  useEffect(() => {
+    function onScroll() {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
+        loadMore();
+      }
+    }
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [page, loading, hasMore]);
+
+  // User Daten laden
+  useEffect(() => {
     if (wallet) {
       fetchUsedToday(wallet).then(setUsedToday);
       fetchBalance(wallet).then(setBalance);
@@ -134,7 +164,6 @@ export default function NooSpace() {
         .then(r => setFarmedTotal((r.data || []).reduce((s, p) => s + (p.reward || 0), 0)))
         .catch(() => {});
 
-      // Wallet start_ts
       supabase.from('wallets').select('start_ts').eq('wallet', wallet).single()
         .then(res => {
           if (res.data?.start_ts) setStartTs(res.data.start_ts);
@@ -149,7 +178,7 @@ export default function NooSpace() {
     }
   }, [wallet]);
 
-  // --- Tage bis Harvest ---
+  // Tage bis Harvest
   useEffect(() => {
     const updateDaysLeft = () => {
       let ts = startTs;
@@ -163,7 +192,7 @@ export default function NooSpace() {
     return () => clearInterval(interval);
   }, [startTs]);
 
-  // --- Posting ---
+  // Posting
   async function post() {
     if (!guest && usedToday >= DAILY_LIMIT) return alert("You have used today's orbs.");
     if (!text.trim()) return;
@@ -176,14 +205,13 @@ export default function NooSpace() {
     const saved = await savePostToBackend(wallet, entry);
     if (!saved) return alert('Failed to save post.');
 
-    setEntries(prev => [saved, ...prev].slice(0, 200));
+    setEntries(prev => [saved, ...prev]);
 
     if (!guest) {
       const newCount = await incrementUsedToday(wallet);
       setUsedToday(newCount);
       const newUnclaimed = await addOrUpdateUnclaimed(wallet, reward);
       setUnclaimed(newUnclaimed);
-      // NICHT direkt Balance erhöhen – nur unclaimed
       setFarmedTotal(prev => prev + reward);
     } else {
       setUsedToday(prev => { localStorage.setItem('noo_used', String(prev + 1)); return prev + 1; });
@@ -192,7 +220,7 @@ export default function NooSpace() {
     setText('');
   }
 
-  // --- Harvest ---
+  // Harvest
   async function harvestNow() {
     if (!wallet) return alert('Connect wallet to harvest your spores.');
     if (daysLeft > 0) return alert(`Harvest not ready. ${daysLeft} days left.`);
@@ -267,7 +295,7 @@ export default function NooSpace() {
         <section className="feed">
           <h3>Recent Thoughts</h3>
           <div className="entries">
-            {entries.length === 0 && <div className="empty">No seeds yet — be the first to post.</div>}
+            {entries.length === 0 && !loading && <div className="empty">No seeds yet — be the first to post.</div>}
             {entries.map((e) => (
               <div className={'entry ' + (e.highlighted ? 'highlight' : '')} key={e.id}>
                 <div className="entry-text">{e.text}</div>
@@ -298,6 +326,8 @@ export default function NooSpace() {
                 </div>
               </div>
             ))}
+            {loading && <div className="loading">Loading more posts…</div>}
+            {!hasMore && entries.length > 0 && <div className="end">No more posts 🌱</div>}
           </div>
         </section>
       </main>
